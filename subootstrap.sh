@@ -19,7 +19,6 @@ failed="$red[failed]$normal"
 don="$green[done]$normal"
 config="tmp/config.tmp"
 
-hook="lxc"
 arch="x86"
 
 function help
@@ -101,15 +100,15 @@ echo -e $don
 
 name="openSUSE-$SID-$arch"
 
-echo -en "Creating the conatainer..."
+if [ "$hook" != "" ]; then
+	echo -en "Use hook script..."
 
-DPID=$(bash $SCRIPTPATH/hooks/$hook.sh $build)
+	DPID=$(bash $SCRIPTPATH/hooks/$hook.sh $build)
 
-if [ "$DPID" != "" ]; then
-	echo -e $failed	
-	exit 1
+	if [ "$DPID" != "" ]; then
+		echo -e $failed	
+		exit 1
+	fi
+
+	echo -e $don
 fi
-
-rm -rf $build
-
-echo -e $don
