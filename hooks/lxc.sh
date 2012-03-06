@@ -28,24 +28,12 @@ mknod -m 666 ${DEV}/ptmx c 5 2
 # copy resolv.conf from the host
 cp /etc/resolv.conf $ROOTFS/etc
 
-# mount proc sys and /dev/pts
-mount -t proc none $ROOTFS/proc
-mount -t sysfs none $ROOTFS/sys
-mount -t devpts none $ROOTFS/dev/pts
 
 # Generate a few needed files / directories :
 touch $ROOTFS/etc/fstab
-rm $ROOTFS/etc/mtab
-ln -s $ROOTFS/proc/mounts /etc/mtab
-
-# unmount proc sys and /dev/pts
-mount -t proc none $ROOTFS/proc
-mount -t sysfs none $ROOTFS/sys
-mount -t devpts none $ROOTFS/dev/pts
 
 
-cat <<EOF > $ROOTFS/config.suse
-	lxc.utsname = openSUSE
+cat >> $ROOTFS/config.suse <<-EOF
 	lxc.tty = 4
 	lxc.network.type = veth
 	lxc.network.flags = up
@@ -72,16 +60,12 @@ cat <<EOF > $ROOTFS/config.suse
 	lxc.cgroup.devices.allow = c 5:2 rwm
 	# rtc
 	lxc.cgroup.devices.allow = c 254:0 rwm
-    EOF
+EOF
 
-cat <<EOF > $ROOTFS/fstab.suse
+cat >> $ROOTFS/fstab.suse <<-EOF
 	none /lxc/rootfs.fedora/dev/pts devpts defaults 0 0
 	none /lxc/rootfs.fedora/proc proc defaults 0 0
 	none /lxc/rootfs.fedora/sys sysfs defaults 0 0
-	#none /lxc/rootfs.fedora/var/lock tmpfs defaults 0 0
-	#none /lxc/rootfs.fedora/var/run tmpfs defaults 0 0
 	/etc/resolv.conf /lxc/rootfs.fedora/etc/resolv.conf none bind 0 0
-    EOF
-
-
+EOF
 

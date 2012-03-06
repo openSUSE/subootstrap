@@ -23,7 +23,9 @@ arch="x86"
 
 function help
 {
-	echo "Usage: subootstrap SID [path]"
+	echo "Usage: subootstrap SID [path] [-h] [-A]"
+	echo "	SID	Version of the openSUSE OS"
+	echo "	path	Path where the filesystem should be stored"
 	echo "	-h	Use userscript"
 	echo "	-A 	Set the architecture of the new System [x86 or x86_64]"
 	exit 1
@@ -49,12 +51,20 @@ function clean
 }
 
 
-options=$(getopt -o h,A,p -l hook,arch,path: -- "$@")
-
 SID=$1
-path=$2
+shift
 
-echo $SID
+path=$1
+shift
+
+while getopts h:A o
+do	case "$o" in
+	h )	hook="$OPTARG";;
+	A )	arch="$OPTARG";;
+	esac
+done
+
+echo $hook
 
 if [ "$SID" = "" ]; then
 	error 10 "SID command is miss."
@@ -74,11 +84,11 @@ fi
 
 echo -e "$don"
 
-echo -en "Build filesystem..."
+echo -e "Build filesystem..."
 
-if [ "$path"!= "" ]; then
+if [ "$path" != "" ]; then
 	mkdir -p $path/suse-$SID
-	build=$path/suse-$SID
+	build="$path/suse-$SID"
 else	
 	build=$(mktemp -d)
 fi
@@ -96,12 +106,13 @@ if [ $? -ne 0 ]; then
 fi
 
 
-echo -e $don
+echo -e "Build filesystem...$don"
 
 name="openSUSE-$SID-$arch"
 
 if [ "$hook" != "" ]; then
-	echo -en "Use hook script..."
+
+	echo -e "Use hook script..."
 
 	DPID=$(bash $SCRIPTPATH/hooks/$hook.sh $build)
 
@@ -110,5 +121,5 @@ if [ "$hook" != "" ]; then
 		exit 1
 	fi
 
-	echo -e $don
+	echo -e "Use hook script...$don"
 fi
