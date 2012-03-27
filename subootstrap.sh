@@ -24,10 +24,10 @@ arch="x86"
 function help
 {
 	echo "Usage: subootstrap SID [path] [-h] [-A]"
-	echo "	SID	Version of the openSUSE OS"
-	echo "	path	Path where the filesystem should be stored"
-	echo "	-h	Use userscript"
-	echo "	-A 	Set the architecture of the new System [x86 or x86_64]"
+	echo " SID Version of the openSUSE OS"
+	echo " path Path where the filesystem should be stored"
+	echo " -h Use userscript"
+	echo " -A Set the architecture of the new System [x86 or x86_64]"
 	exit 1
 }
 
@@ -42,12 +42,6 @@ function error
 	suffix=$(date)
 	echo -e "$red Error $1: $2 $normal"
 	echo "$1::$suffix ($USER)::$2" >> logfile.log
-	clean
-}
-
-function clean
-{
-	sudo rm -rf $build
 }
 
 
@@ -58,38 +52,19 @@ path=$1
 shift
 
 while getopts h:A o
-do	case "$o" in
-	h )	hook="$OPTARG";;
-	A )	arch="$OPTARG";;
-	esac
+do case "$o" in
+h ) hook="$OPTARG";;
+A ) arch="$OPTARG";;
+esac
 done
 
-echo $hook
-
-if [ "$SID" = "" ]; then
-	error 10 "SID command is miss."
-	exit 1
-fi
-
-#Check if OS Build exist local
-echo -en "Checking system..."
-
-os="/usr/share/kiwi/image/vmxboot/suse-$SID"
-
-if [ ! -d "$os" ]; then
-	echo -e "$failed"
-	error 20 "This version of openSUSE ist not supported."
-	exit 1
-fi
-
-echo -e "$don"
 
 echo -e "Build filesystem..."
 
 if [ "$path" != "" ]; then
-	mkdir -p $path/suse-$SID
-	build="$path/suse-$SID"
-else	
+	mkdir -p $path/$SID
+	build="$path/$SID"
+	else
 	build=$(mktemp -d)
 fi
 
@@ -97,11 +72,11 @@ if [ "$arch" != "x86" ]; then
 	setarch="--target-arch $arch"
 fi
 
-sudo kiwi --prepare $os --root $build $setarch
+sudo kiwi --prepare $SID-JeOS --root $build $setarch
 
 if [ $? -ne 0 ]; then
-	echo -e $failed
-	error 30 "kiwi has thrown an error. You may need higher permission. For more use --help"
+	echo -e "Build filesystem... $failed"
+	error 30 "kiwi has thrown an error. You may need higher permission."
 	exit 1
 fi
 
@@ -114,10 +89,10 @@ if [ "$hook" != "" ]; then
 
 	echo -e "Use hook script..."
 
-	DPID=$(bash $SCRIPTPATH/hooks/$hook.sh $build)
+	DPID=$(bash $SCRIPTPATH/hooks/$hook.sh $build openSUSE)
 
 	if [ "$DPID" != "" ]; then
-		echo -e $failed	
+		echo -e $failed
 		exit 1
 	fi
 
