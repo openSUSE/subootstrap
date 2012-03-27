@@ -1,71 +1,206 @@
 #!/bin/bash
 
-ROOTFS=$1
-DEV=${ROOTFS}/dev
 
+configure_opensuse()
+{
+    rootfs=$1
+    hostname=$2
 
-#Disable udev
-rm -rf ${DEV}
-mkdir ${DEV}
-mknod -m 666 ${DEV}/null c 1 3
-mknod -m 666 ${DEV}/zero c 1 5
-mknod -m 666 ${DEV}/random c 1 8
-mknod -m 666 ${DEV}/urandom c 1 9
-mkdir -m 755 ${DEV}/pts
-mkdir -m 1777 ${DEV}/shm
-mknod -m 666 ${DEV}/tty c 5 0
-mknod -m 666 ${DEV}/tty0 c 4 0
-mknod -m 666 ${DEV}/tty1 c 4 1
-mknod -m 666 ${DEV}/tty2 c 4 2
-mknod -m 666 ${DEV}/tty3 c 4 3
-mknod -m 666 ${DEV}/tty4 c 4 4
-mknod -m 600 ${DEV}/console c 5 1
-mknod -m 666 ${DEV}/full c 1 7
-mknod -m 600 ${DEV}/initctl p
-mknod -m 666 ${DEV}/ptmx c 5 2
-
-
-# copy resolv.conf from the host
-cp /etc/resolv.conf $ROOTFS/etc
-
-
-# Generate a few needed files / directories :
-touch $ROOTFS/etc/fstab
-
-
-cat >> $ROOTFS/config.suse <<-EOF
-	lxc.tty = 4
-	lxc.network.type = veth
-	lxc.network.flags = up
-	lxc.network.link = br0
-	lxc.network.name = eth0
-	lxc.network.mtu = 1500
-	lxc.network.ipv4 = 192.168.0.65/24
-	lxc.rootfs = $ROOTFS
-	lxc.mount = $ROOTFS/../fstab.suse
-	lxc.cgroup.devices.deny = a
-	# /dev/null and zero
-	lxc.cgroup.devices.allow = c 1:3 rwm
-	lxc.cgroup.devices.allow = c 1:5 rwm
-	# consoles
-	lxc.cgroup.devices.allow = c 5:1 rwm
-	lxc.cgroup.devices.allow = c 5:0 rwm
-	lxc.cgroup.devices.allow = c 4:0 rwm
-	lxc.cgroup.devices.allow = c 4:1 rwm
-	# /dev/{,u}random
-	lxc.cgroup.devices.allow = c 1:9 rwm
-	lxc.cgroup.devices.allow = c 1:8 rwm
-	# /dev/pts/* - pts namespaces are "coming soon"
-	lxc.cgroup.devices.allow = c 136:* rwm
-	lxc.cgroup.devices.allow = c 5:2 rwm
-	# rtc
-	lxc.cgroup.devices.allow = c 254:0 rwm
+   # set network as static, but everything is done by LXC outside the container
+   cat <<EOF > $rootfs/etc/sysconfig/network/ifcfg-eth0
+STARTMODE='auto'
+BOOTPROTO='static'
 EOF
 
-cat >> $ROOTFS/fstab.suse <<-EOF
-	none /lxc/rootfs.fedora/dev/pts devpts defaults 0 0
-	none /lxc/rootfs.fedora/proc proc defaults 0 0
-	none /lxc/rootfs.fedora/sys sysfs defaults 0 0
-	/etc/resolv.conf /lxc/rootfs.fedora/etc/resolv.conf none bind 0 0
+   # set default route
+   IP=$(/sbin/ip route | awk '/default/ { print $3 }')
+   echo "default $IP - -" > $rootfs/etc/sysconfig/network/routes
+
+   # create empty fstab
+   touch $rootfs/etc/fstab
+
+    # create minimal /dev
+    mknod -m 666 $rootfs/dev/random c 1 8
+    mknod -m 666 $rootfs/dev/urandom c 1 9
+    mkdir -m 755 $rootfs/dev/pts
+    mkdir -m 1777 $rootfs/dev/shm
+    mknod -m 666 $rootfs/dev/tty c 5 0
+    mknod -m 600 $rootfs/dev/console c 5 1
+    mknod -m 666 $rootfs/dev/tty0 c 4 0
+    mknod -m 666 $rootfs/dev/tty1 c 4 1
+    mknod -m 666 $rootfs/dev/tty2 c 4 2
+    mknod -m 666 $rootfs/dev/tty3 c 4 3
+    mknod -m 666 $rootfs/dev/tty4 c 4 4
+    ln -s null $rootfs/dev/tty10
+    mknod -m 666 $rootfs/dev/full c 1 7
+    mknod -m 666 $rootfs/dev/ptmx c 5 2
+    ln -s /proc/self/fd $rootfs/dev/fd
+    ln -s /proc/kcore $rootfs/dev/core
+    mkdir -m 755 $rootfs/dev/mapper
+    mknod -m 600 $rootfs/dev/mapper/control c 10 60
+    mkdir -m 755 $rootfs/dev/net
+    mknod -m 666 $rootfs/dev/net/tun c 10 200
+
+    # set the hostname
+    cat <<EOF > $rootfs/etc/HOSTNAME
+$hostname
 EOF
 
+    # do not use hostname from HOSTNAME variable
+    cat <<EOF >> $rootfs/etc/sysconfig/cron
+unset HOSTNAME
+EOF
+
+    # set minimal hosts
+    cat <<EOF > $rootfs/etc/hosts
+127.0.0.1 localhost $hostname
+EOF
+
+    # disable various services
+    # disable yast->bootloader in container
+    cat <<EOF > $rootfs/etc/sysconfig/bootloader
+LOADER_TYPE=none
+LOADER_LOCATION=none
+EOF
+
+    # cut down inittab
+    cat <<EOF > $rootfs/etc/inittab
+id:3:initdefault:
+si::bootwait:/etc/init.d/boot
+l0:0:wait:/etc/init.d/rc 0
+l1:1:wait:/etc/init.d/rc 1
+l2:2:wait:/etc/init.d/rc 2
+l3:3:wait:/etc/init.d/rc 3
+l6:6:wait:/etc/init.d/rc 6
+ls:S:wait:/etc/init.d/rc S
+~~:S:respawn:/sbin/sulogin
+p6::ctrlaltdel:/sbin/init 6
+p0::powerfail:/sbin/init 0
+cons:2345:respawn:/sbin/mingetty --noclear console screen
+c1:2345:respawn:/sbin/mingetty --noclear tty1 screen
+EOF
+
+    # set /dev/console as securetty
+    cat << EOF >> $rootfs/etc/securetty
+console
+EOF
+
+    cat <<EOF >> $rootfs/etc/sysconfig/boot
+# disable root fsck
+ROOTFS_FSCK="0"
+ROOTFS_BLKDEV="/dev/null"
+EOF
+
+
+    # remove pointless services in a container
+    chroot $rootfs /sbin/insserv -r -f boot.udev boot.loadmodules boot.device-mapper boot.clock boot.swap boot.klog kbd
+
+    echo "Please change root-password !"
+    echo "root:root" | chroot $rootfs chpasswd
+
+    return 0
+}
+
+
+copy_configuration()
+{
+    path=$1
+    rootfs=$2
+    name=$3
+
+    cat <<EOF >> $path/config
+lxc.utsname = $name
+
+lxc.tty = 4
+lxc.pts = 1024
+lxc.rootfs = $rootfs
+lxc.mount  = $path/fstab
+
+lxc.cgroup.devices.deny = a
+# /dev/null and zero
+lxc.cgroup.devices.allow = c 1:3 rwm
+lxc.cgroup.devices.allow = c 1:5 rwm
+# consoles
+lxc.cgroup.devices.allow = c 5:1 rwm
+lxc.cgroup.devices.allow = c 5:0 rwm
+lxc.cgroup.devices.allow = c 4:0 rwm
+lxc.cgroup.devices.allow = c 4:1 rwm
+# /dev/{,u}random
+lxc.cgroup.devices.allow = c 1:9 rwm
+lxc.cgroup.devices.allow = c 1:8 rwm
+lxc.cgroup.devices.allow = c 136:* rwm
+lxc.cgroup.devices.allow = c 5:2 rwm
+# rtc
+lxc.cgroup.devices.allow = c 254:0 rwm
+EOF
+
+    cat <<EOF > $path/fstab
+proc            $rootfs/proc         proc	nodev,noexec,nosuid 0 0
+sysfs           $rootfs/sys          sysfs	defaults  0 0
+EOF
+
+    if [ $? -ne 0 ]; then
+	echo "Failed to add configuration"
+	return 1
+    fi
+
+    return 0
+}
+
+function configure_container
+{
+
+
+chroot $1 zypper rm udev
+chroot $1 rm -rf /etc/udev /lib/udev
+
+#Remove a few upstart scripts
+chroot $1 cd /etc/init
+chroot $1 rm mountall* upstart*
+
+#unmount /proc /sys and /dev/pts
+#umount /dev/pts
+#umount /proc
+#umount /sys
+
+
+}
+
+
+
+type zypper > /dev/null
+if [ $? -ne 0 ]; then
+    echo "'zypper' command is missing"
+    exit 1
+fi
+
+if [ -z "$path" ]; then
+    echo "'path' parameter is required"
+    exit 1
+fi
+
+if [ "$(id -u)" != "0" ]; then
+    echo "This script should be run as 'root'"
+    exit 1
+fi
+
+rootfs=$1
+name=$2
+
+configure_opensuse $rootfs $name
+if [ $? -ne 0 ]; then
+    echo "failed to configure opensuse for a container"
+    exit 1
+fi
+
+copy_configuration $rootfs/../ $rootfs $name
+if [ $? -ne 0 ]; then
+    echo "failed write configuration file"
+    exit 1
+fi
+
+configure_container $rootfs
+if [ $? -ne 0 ]; then
+    echo "failed configure container"
+    exit 1
+fi
