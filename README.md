@@ -45,12 +45,12 @@ Go to lxc template directory (like /usr/lib64/lxc/templates) and change the cont
 
 bash subootstrap $yourversion $yourpath -h lxc
 ```
-You have to replace the variables with:
-
-$yourversion := the version you want. Exsample 11.4-JeOS
-$yourpath := the path where you want to store the filesystem
-
-Now open the Terminal login you in as root and then type in:
+You have to replace the variables with:  
+  
+$yourversion := the version you want. Exsample 11.4-JeOS  
+$yourpath := the path where you want to store the filesystem  
+  
+Now open the Terminal login you in as root and then type in:  
 ```bash
 lxc-create -n yourname -t opensuse
 ```
