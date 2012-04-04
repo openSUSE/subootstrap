@@ -108,13 +108,13 @@ copy_configuration()
     rootfs=$2
     name=$3
 
-    cat <<EOF >> $path/config
+    cat <<EOF >> /etc/lxc/openSUSE/config #$path/config
 lxc.utsname = $name
 
 lxc.tty = 4
 lxc.pts = 1024
 lxc.rootfs = $rootfs
-lxc.mount  = $path/fstab
+lxc.mount = $path/fstab
 
 lxc.cgroup.devices.deny = a
 # /dev/null and zero
@@ -130,37 +130,43 @@ lxc.cgroup.devices.allow = c 1:9 rwm
 lxc.cgroup.devices.allow = c 1:8 rwm
 lxc.cgroup.devices.allow = c 136:* rwm
 lxc.cgroup.devices.allow = c 5:2 rwm
+# udev
+lxc.cgroup.devices.allow = c 108:0 rwm
+lxc.cgroup.devices.allow = c 10:229 rwm
+lxc.cgroup.devices.allow = b 7:0 rwm
+lxc.cgroup.devices.allow = c 10:200 rwm
 # rtc
 lxc.cgroup.devices.allow = c 254:0 rwm
 EOF
 
     cat <<EOF > $path/fstab
-proc            $rootfs/proc         proc	nodev,noexec,nosuid 0 0
-sysfs           $rootfs/sys          sysfs	defaults  0 0
+proc $rootfs/proc proc nodev,noexec,nosuid 0 0
+sysfs $rootfs/sys sysfs defaults 0 0
 EOF
 
     if [ $? -ne 0 ]; then
-	echo "Failed to add configuration"
-	return 1
+echo "Failed to add configuration"
+return 1
     fi
 
-    return 0
+return 0
 }
 
 function configure_container
 {
 
 
-chroot $1 zypper rm udev
+#chroot $1 zypper rm udev
 chroot $1 rm -rf /etc/udev /lib/udev
 
+ 
 #Remove a few upstart scripts
-chroot $1 cd /etc/init
-chroot $1 rm mountall* upstart*
+#chroot $1 cd /etc/init
+#chroot $1 rm mountall* upstart*
 
 #unmount /proc /sys and /dev/pts
 #umount /dev/pts
-#umount /proc
+#chroot $1 umount /proc
 #umount /sys
 
 
@@ -170,17 +176,12 @@ chroot $1 rm mountall* upstart*
 
 type zypper > /dev/null
 if [ $? -ne 0 ]; then
-    echo "'zypper' command is missing"
-    exit 1
-fi
-
-if [ -z "$path" ]; then
-    echo "'path' parameter is required"
+echo "'zypper' command is missing"
     exit 1
 fi
 
 if [ "$(id -u)" != "0" ]; then
-    echo "This script should be run as 'root'"
+echo "This script should be run as 'root'"
     exit 1
 fi
 
@@ -189,18 +190,18 @@ name=$2
 
 configure_opensuse $rootfs $name
 if [ $? -ne 0 ]; then
-    echo "failed to configure opensuse for a container"
+echo "failed to configure opensuse for a container"
     exit 1
 fi
 
 copy_configuration $rootfs/../ $rootfs $name
 if [ $? -ne 0 ]; then
-    echo "failed write configuration file"
+echo "failed write configuration file"
     exit 1
 fi
 
 configure_container $rootfs
 if [ $? -ne 0 ]; then
-    echo "failed configure container"
+echo "failed configure container"
     exit 1
 fi
