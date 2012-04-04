@@ -23,7 +23,7 @@ How to use it
 subootstrap 12.1-JeOS /path/where/you/want/to/store/the/filesystem [-h lxc] [-A x86_64]
 ```
 
--h activate one of the hook scripts  return
+-h activate one of the hook scripts  
 -A set the architecture for the system
 
 
