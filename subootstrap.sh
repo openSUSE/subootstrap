@@ -1,6 +1,6 @@
-#!/bin/sh
-#
-# subootstrap
+#!/bin/bash/
+
+#ubootstrap
 #
 
 VERSION="0.0.1(alpha)"
@@ -24,10 +24,10 @@ arch="x86"
 function help
 {
 	echo "Usage: subootstrap SID [path] [-h] [-A]"
-	echo "	SID	Version of the openSUSE OS"
-	echo "	path	Path where the filesystem should be stored"
-	echo "	-h	Use userscript"
-	echo "	-A 	Set the architecture of the new System [x86 or x86_64]"
+	echo " SID Version of the openSUSE OS"
+	echo " path Path where the filesystem should be stored"
+	echo " -h Use userscript"
+	echo " -A Set the architecture of the new System [x86 or x86_64]"
 	exit 1
 }
 
@@ -50,6 +50,10 @@ function clean
 	sudo rm -rf $build
 }
 
+if [ "$1" = "-l" ]; then
+  kiwi -l
+  exit 1
+fi
 
 SID=$1
 shift
@@ -57,11 +61,11 @@ shift
 path=$1
 shift
 
-while getopts h:A o
-do	case "$o" in
-	h )	hook="$OPTARG";;
-	A )	arch="$OPTARG";;
-	esac
+while getopts h:A:l o
+do case "$o" in
+	h ) hook="$OPTARG";;
+	A ) arch="$OPTARG";;
+esac
 done
 
 echo $hook
@@ -91,7 +95,7 @@ fi
 if [ "$path" != "" ]; then
 	mkdir -p $path/$name
 	build="$path/$name"
-else	
+else
 	build=$(mktemp -d)
 fi
 
@@ -100,7 +104,7 @@ if [ "$arch" != "x86" ]; then
 	setarch="--target-arch $arch"
 fi
 
-sudo kiwi --prepare suse-$SID-JeOS --root $build $setarch
+sudo kiwi --prepare suse-$SID --root $build $setarch
 
 if [ $? -ne 0 ]; then
 	echo -e $failed
@@ -120,7 +124,7 @@ if [ "$hook" != "" ]; then
 	bash $SCRIPTPATH/hooks/$hook.sh $build openSUSE
 
 	if [ $? -ne 0 ]; then
-		echo -e $failed	
+		echo -e $failed
 		exit 1
 	fi
 
