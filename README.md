@@ -20,9 +20,9 @@ Version
 What needed
 -----------
 
-*[kiwi](http://opensuse.github.com/kiwi/) ~> v4.98.15 or higher
-  *kiwi-templates
-*[lxc](http://lxc.sourceforge.net/)
+* [kiwi](http://opensuse.github.com/kiwi/) ~> v4.98.15 or higher
+  * kiwi-templates
+* [lxc](http://lxc.sourceforge.net/)
 
 How to use it
 -------------
