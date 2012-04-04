@@ -7,7 +7,8 @@
 What is it?
 -----------
 
-subootstrap is a tool to create openSUSE filesystems on a host system by using [kiwi](http://opensuse.github.com/kiwi/). subootstrap contains a script which make the subfilesystem compatiple with [lxc](http://lxc.sourceforge.net/).
+subootstrap is a tool to create openSUSE filesystems on a host system by using [kiwi](http://opensuse.github.com/kiwi/).
+subootstrap contains a script which make the subfilesystem compatiple with [lxc](http://lxc.sourceforge.net/).
 
 
 Version
@@ -15,6 +16,13 @@ Version
 
 0.0.1(alpha)
 
+
+What needed
+-----------
+
+*[kiwi](http://opensuse.github.com/kiwi/) ~> v4.98.15 or higher
+  *kiwi-templates
+*[lxc](http://lxc.sourceforge.net/)
 
 How to use it
 -------------
