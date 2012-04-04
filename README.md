@@ -24,7 +24,7 @@ subootstrap 12.1-JeOS /path/where/you/want/to/store/the/filesystem [-h lxc] [-A 
 ```
 
 -h activate one of the hook scripts 
-tag_br
+return
 -A set the architecture for the system
 
 
