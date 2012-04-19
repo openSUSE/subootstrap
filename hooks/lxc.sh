@@ -1,5 +1,33 @@
 #!/bin/bash
 
+#
+# template script for generating suse container for LXC
+#
+
+#
+# lxc: linux Container library
+
+# Authors:
+# Daniel Lezcano <daniel.lezcano@free.fr>
+# Frederic Crozat <fcrozat@suse.com>
+
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+ # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
+
+declare -a arc
+arc=(`echo ${2//./}`} # | tr "-" " "`)
+DISTRO=${$arc[0]}
 
 configure_opensuse()
 {
@@ -101,6 +129,63 @@ EOF
     return 0
 }
 
+install_opensuse()
+{
+    cache="$1"
+
+ 
+    mkdir $cache/partial-packages
+ 
+    zypper --quiet --root $cache --non-interactive --gpg-auto-import-keys update
+    zypper refresh
+    zypper --root $cache --reposd-dir $cache/etc/zypp/repos.d --non-interactive in --auto-agree-with-licenses --download-only lxc patterns-openSUSE-base sysvinit-init
+    cat > $cache/opensuse.conf << EOF
+Preinstall: aaa_base bash coreutils diffutils
+Preinstall: filesystem fillup glibc grep insserv libacl1 libattr1
+Preinstall: libbz2-1 libgcc46 libxcrypt libncurses5 pam
+Preinstall: permissions libreadline6 rpm sed tar zlib libselinux1
+Preinstall: liblzma5 libcap2 libpcre0
+Preinstall: libpopt0 libelf1 liblua5_1
+
+RunScripts: aaa_base
+
+Support: zypper
+Support: patterns-openSUSE-base
+Support: lxc
+Prefer: sysvinit-init
+
+Ignore: patterns-openSUSE-base:patterns-openSUSE-yast2_install_wf
+EOF
+    
+echo -e "http://download.opensuse.org/distribution/$DISTRO/repo/os"
+
+    CLEAN_BUILD=1 BUILD_ROOT="$cache" BUILD_DIST="$cache/opensuse.conf" /usr/lib/build/init_buildsystem  --clean --cachedir $cache/partial-packages --repository $cache/var/cache/zypp/packages/repo-oss/suse/$arch --repository $cache/var/cache/zypp/packages/repo-oss/suse/noarch 
+    chroot $cache /usr/bin/zypper --quiet --non-interactive ar http://download.opensuse.org/distribution/$DISTRO/repo/oss repo-oss
+    chroot $cache /usr/bin/zypper --quiet --non-interactive ar http://download.opensuse.org/update/$DISTRO/ update
+    chroot $cache rpm -e patterns-openSUSE-base
+    umount $cache/proc
+#   really clean the image
+    rm -fr $cache/{.build,.guessed_dist,.srcfiles*,installed-pkg}
+    rm -fr $cache/dev
+#    make sure we have a minimal /dev
+    mkdir -p "$cache/dev"
+    mknod -m 666 $cache/dev/null c 1 3
+    mknod -m 666 $cache/dev/zero c 1 5
+#   create mtab symlink
+    rm -f $cache/etc/mtab
+    ln -sf /proc/self/mounts $cache/etc/mtab
+    if [ $? -ne 0 ]; then
+	echo "Failed to download the rootfs, aborting."
+	return 1
+    fi
+
+    rm -fr "$cache"
+    #mv "$1" "$1/rootfs"
+    echo "Download complete."
+
+    return 0
+}
+
 
 copy_configuration()
 {
@@ -108,13 +193,13 @@ copy_configuration()
     rootfs=$2
     name=$3
 
-    cat <<EOF >> /etc/lxc/openSUSE/config #$path/config
+    cat <<EOF >> $path/config
 lxc.utsname = $name
 
 lxc.tty = 4
 lxc.pts = 1024
 lxc.rootfs = $rootfs
-lxc.mount = $path/fstab
+lxc.mount  = $path/fstab
 
 lxc.cgroup.devices.deny = a
 # /dev/null and zero
@@ -130,78 +215,96 @@ lxc.cgroup.devices.allow = c 1:9 rwm
 lxc.cgroup.devices.allow = c 1:8 rwm
 lxc.cgroup.devices.allow = c 136:* rwm
 lxc.cgroup.devices.allow = c 5:2 rwm
-# udev
-lxc.cgroup.devices.allow = c 108:0 rwm
-lxc.cgroup.devices.allow = c 10:229 rwm
-lxc.cgroup.devices.allow = b 7:0 rwm
-lxc.cgroup.devices.allow = c 10:200 rwm
 # rtc
 lxc.cgroup.devices.allow = c 254:0 rwm
 EOF
 
     cat <<EOF > $path/fstab
-proc $rootfs/proc proc nodev,noexec,nosuid 0 0
-sysfs $rootfs/sys sysfs defaults 0 0
+proc            $rootfs/proc         proc	nodev,noexec,nosuid 0 0
+sysfs           $rootfs/sys          sysfs	defaults  0 0
 EOF
 
     if [ $? -ne 0 ]; then
-echo "Failed to add configuration"
-return 1
+	echo "Failed to add configuration"
+	return 1
     fi
 
-return 0
+    return 0
 }
 
-function configure_container
+clean()
 {
+    cache="/var/cache/lxc/opensuse"
 
+    if [ ! -e $cache ]; then
+	exit 0
+    fi
 
-#chroot $1 zypper rm udev
-chroot $1 rm -rf /etc/udev /lib/udev
+    # lock, so we won't purge while someone is creating a repository
+    (
+	flock -n -x 200
+	if [ $? != 0 ]; then
+	    echo "Cache repository is busy."
+	    exit 1
+	fi
 
- 
-#Remove a few upstart scripts
-#chroot $1 cd /etc/init
-#chroot $1 rm mountall* upstart*
+	echo -n "Purging the download cache..."
+	rm --preserve-root --one-file-system -rf $cache && echo "Done." || exit 1
+	exit 0
 
-#unmount /proc /sys and /dev/pts
-#umount /dev/pts
-#chroot $1 umount /proc
-#umount /sys
-
-
+    ) 200>/var/lock/subsys/lxc
 }
 
+usage()
+{
+    cat <<EOF
+$1 -h|--help -p|--path=<path> --clean
+EOF
+    return 0
+}
+
+path=$1
+
+#eval set -- "$options"
 
 
 type zypper > /dev/null
 if [ $? -ne 0 ]; then
-echo "'zypper' command is missing"
+    echo "'zypper' command is missing"
+    exit 1
+fi
+
+if [ -z "$path" ]; then
+    echo "'path' parameter is required"
     exit 1
 fi
 
 if [ "$(id -u)" != "0" ]; then
-echo "This script should be run as 'root'"
+    echo "This script should be run as 'root'"
     exit 1
 fi
 
-rootfs=$1
-name=$2
+rootfs=$path
+
+install_opensuse $rootfs
+if [ $? -ne 0 ]; then
+    echo "failed to install opensuse"
+    exit 1
+fi
 
 configure_opensuse $rootfs $name
 if [ $? -ne 0 ]; then
-echo "failed to configure opensuse for a container"
+    echo "failed to configure opensuse for a container"
     exit 1
 fi
 
-copy_configuration $rootfs/../ $rootfs $name
+copy_configuration $path $rootfs $name
 if [ $? -ne 0 ]; then
-echo "failed write configuration file"
+    echo "failed write configuration file"
     exit 1
 fi
 
-configure_container $rootfs
-if [ $? -ne 0 ]; then
-echo "failed configure container"
-    exit 1
+if [ ! -z $clean ]; then
+    clean || exit 1
+    exit 0
 fi
