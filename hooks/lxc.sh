@@ -120,8 +120,6 @@ EOF
     # remove pointless services in a container
     chroot $rootfs /sbin/insserv -no-reload -r -f boot.udev boot.loadmodules boot.device-mapper boot.clock boot.swap boot.klog kbd
 
-    echo "Please change root-password !"
-    echo "root:root" | chroot $rootfs chpasswd
 
     return 0
 }
@@ -136,6 +134,7 @@ install_opensuse()
     zypper --quiet --root $cache --non-interactive --gpg-auto-import-keys update
     zypper refresh
     zypper --root $cache --reposd-dir $cache/etc/zypp/repos.d --non-interactive in --auto-agree-with-licenses --download-only lxc patterns-openSUSE-base sysvinit-init
+
     cat > $cache/opensuse.conf << EOF
 Preinstall: aaa_base bash coreutils diffutils
 Preinstall: filesystem fillup glibc grep insserv libacl1 libattr1
@@ -153,16 +152,15 @@ Prefer: sysvinit-init
 
 Ignore: patterns-openSUSE-base:patterns-openSUSE-yast2_install_wf
 EOF
-    
-echo -e "http://download.opensuse.org/distribution/$DISTRO/repo/os"
+ 
 
-    CLEAN_BUILD=1 BUILD_ROOT="$cache" BUILD_DIST="$cache/opensuse.conf" /usr/lib/build/init_buildsystem --clean --cachedir $cache/partial-packages --repository $cache/var/cache/zypp/packages/repo-oss/suse/$arch --repository $cache/var/cache/zypp/packages/repo-oss/suse/noarch
+   CLEAN_BUILD=1 BUILD_ROOT="$cache" BUILD_DIST="$cache/opensuse.conf" /usr/lib/build/init_buildsystem --clean --cachedir $cache/partial-packages --repository $cache/var/cache/zypp/packages/repo-oss/suse/$arch --repository $cache/var/cache/zypp/packages/repo-oss/suse/noarch
     
 
 #chroot $cache zypper --quiet --non-interactive ar http://download.opensuse.org/distribution/$DISTRO/repo/oss repo-oss
 zypper --root $cache --quiet --non-interactive ar http://download.opensuse.org/distribution/$DISTRO/repo/oss repo-oss
 
-    zypper --root $cache --quiet --non-interactive ar http://download.opensuse.org/update/$DISTRO/ update
+    #zypper --root $cache --quiet --non-interactive ar http://download.opensuse.org/update/$DISTRO/ update
     chroot $cache rpm -e patterns-openSUSE-base
     umount $cache/proc
 # really clean the image
@@ -175,13 +173,14 @@ zypper --root $cache --quiet --non-interactive ar http://download.opensuse.org/d
 # create mtab symlink
     rm -f $cache/etc/mtab
     ln -sf /proc/self/mounts $cache/etc/mtab
-    if [ $? -ne 0 ]; then
-echo "Failed to download the rootfs, aborting."
-return 1
-    fi
+
+if [ $? -ne 0 ]; then
+ echo "Failed to download the rootfs, aborting."
+	return 1
+fi
 
 rm -fr "$cache"
-    #mv "$1" "$1/rootfs"
+    mv "$1" "$1/rootfs"
     echo "Download complete."
 
     return 0
@@ -194,9 +193,9 @@ copy_configuration()
     rootfs=$2
     name=$3
 
-echo -e "Checkpoint 1"
+    mkdir $path
 
-    cat <<EOF >> $path/config
+    cat > $path/config << EOF
 lxc.utsname = $name
 
 lxc.tty = 4
@@ -220,19 +219,18 @@ lxc.cgroup.devices.allow = c 136:* rwm
 lxc.cgroup.devices.allow = c 5:2 rwm
 # rtc
 lxc.cgroup.devices.allow = c 254:0 rwm
+
 EOF
 
-echo -e "Checkpoint 2"
-
-    cat <<EOF > $path/fstab
+    cat > $path/fstab << EOF
 proc $rootfs/proc proc nodev,noexec,nosuid 0 0
 sysfs $rootfs/sys sysfs defaults 0 0
 EOF
 
-    if [ $? -ne 0 ]; then
-echo "Failed to add configuration"
-return 1
-    fi
+if [ $? -ne 0 ]; then
+	echo "Failed to add configuration"
+	return 1
+fi
 
 return 0
 }
@@ -284,10 +282,10 @@ name=$2
 #    exit 1
 #fi
 
-#if [ -z "$path" ]; then
-#echo "'path' parameter is required"
-#    exit 1
-#fi
+if [ -z "$path" ]; then
+    echo "'path' parameter is required"
+    exit 1
+fi
 
 if [ "$(id -u)" != "0" ]; then
 echo "This script should be run as 'root'"
@@ -295,7 +293,7 @@ echo "This script should be run as 'root'"
 fi
 
 
-install_opensuse $rootfs
+install_opensuse $path
 if [ $? -ne 0 ]; then
 echo "failed to install opensuse"
     exit 1
@@ -307,6 +305,7 @@ echo "failed to configure opensuse for a container"
     exit 1
 fi
 
+
 copy_configuration $path $rootfs $name
 if [ $? -ne 0 ]; then
 echo "failed write configuration file"
@@ -314,6 +313,5 @@ echo "failed write configuration file"
 fi
 
 if [ ! -z $clean ]; then
-clean || exit 1
-    exit 0
+clean || exit     exit 0
 fi
