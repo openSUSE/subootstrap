@@ -121,7 +121,7 @@ if [ "$hook" != "" ]; then
 
 echo -e "Use hook script..."
 
-bash $SCRIPTPATH/hooks/$hook.sh $build/../config opensuse-$SID $build
+bash $SCRIPTPATH/hooks/$hook.sh $build/../cache opensuse-$SID $build
 
 if [ $? -ne 0 ]; then
 echo -e $failed
