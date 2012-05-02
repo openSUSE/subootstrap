@@ -18,16 +18,13 @@
 
 # This library is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
- # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
 # Lesser General Public License for more details.
 
 # You should have received a copy of the GNU Lesser General Public
 # License along with this library; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
 
-declare -a arc
-arc=(`echo ${2//./}`} # | tr "-" " "`)
-DISTRO=${$arc[0]}
 
 configure_opensuse()
 {
@@ -121,7 +118,7 @@ EOF
 
 
     # remove pointless services in a container
-    chroot $rootfs /sbin/insserv -r -f boot.udev boot.loadmodules boot.device-mapper boot.clock boot.swap boot.klog kbd
+    chroot $rootfs /sbin/insserv -no-reload -r -f boot.udev boot.loadmodules boot.device-mapper boot.clock boot.swap boot.klog kbd
 
     echo "Please change root-password !"
     echo "root:root" | chroot $rootfs chpasswd
@@ -159,27 +156,31 @@ EOF
     
 echo -e "http://download.opensuse.org/distribution/$DISTRO/repo/os"
 
-    CLEAN_BUILD=1 BUILD_ROOT="$cache" BUILD_DIST="$cache/opensuse.conf" /usr/lib/build/init_buildsystem  --clean --cachedir $cache/partial-packages --repository $cache/var/cache/zypp/packages/repo-oss/suse/$arch --repository $cache/var/cache/zypp/packages/repo-oss/suse/noarch 
-    chroot $cache /usr/bin/zypper --quiet --non-interactive ar http://download.opensuse.org/distribution/$DISTRO/repo/oss repo-oss
-    chroot $cache /usr/bin/zypper --quiet --non-interactive ar http://download.opensuse.org/update/$DISTRO/ update
+    CLEAN_BUILD=1 BUILD_ROOT="$cache" BUILD_DIST="$cache/opensuse.conf" /usr/lib/build/init_buildsystem --clean --cachedir $cache/partial-packages --repository $cache/var/cache/zypp/packages/repo-oss/suse/$arch --repository $cache/var/cache/zypp/packages/repo-oss/suse/noarch
+    
+
+#chroot $cache zypper --quiet --non-interactive ar http://download.opensuse.org/distribution/$DISTRO/repo/oss repo-oss
+zypper --root $cache --quiet --non-interactive ar http://download.opensuse.org/distribution/$DISTRO/repo/oss repo-oss
+
+    zypper --root $cache --quiet --non-interactive ar http://download.opensuse.org/update/$DISTRO/ update
     chroot $cache rpm -e patterns-openSUSE-base
     umount $cache/proc
-#   really clean the image
+# really clean the image
     rm -fr $cache/{.build,.guessed_dist,.srcfiles*,installed-pkg}
     rm -fr $cache/dev
-#    make sure we have a minimal /dev
+# make sure we have a minimal /dev
     mkdir -p "$cache/dev"
     mknod -m 666 $cache/dev/null c 1 3
     mknod -m 666 $cache/dev/zero c 1 5
-#   create mtab symlink
+# create mtab symlink
     rm -f $cache/etc/mtab
     ln -sf /proc/self/mounts $cache/etc/mtab
     if [ $? -ne 0 ]; then
-	echo "Failed to download the rootfs, aborting."
-	return 1
+echo "Failed to download the rootfs, aborting."
+return 1
     fi
 
-    rm -fr "$cache"
+rm -fr "$cache"
     #mv "$1" "$1/rootfs"
     echo "Download complete."
 
@@ -193,13 +194,15 @@ copy_configuration()
     rootfs=$2
     name=$3
 
+echo -e "Checkpoint 1"
+
     cat <<EOF >> $path/config
 lxc.utsname = $name
 
 lxc.tty = 4
 lxc.pts = 1024
 lxc.rootfs = $rootfs
-lxc.mount  = $path/fstab
+lxc.mount = $path/fstab
 
 lxc.cgroup.devices.deny = a
 # /dev/null and zero
@@ -219,17 +222,19 @@ lxc.cgroup.devices.allow = c 5:2 rwm
 lxc.cgroup.devices.allow = c 254:0 rwm
 EOF
 
+echo -e "Checkpoint 2"
+
     cat <<EOF > $path/fstab
-proc            $rootfs/proc         proc	nodev,noexec,nosuid 0 0
-sysfs           $rootfs/sys          sysfs	defaults  0 0
+proc $rootfs/proc proc nodev,noexec,nosuid 0 0
+sysfs $rootfs/sys sysfs defaults 0 0
 EOF
 
     if [ $? -ne 0 ]; then
-	echo "Failed to add configuration"
-	return 1
+echo "Failed to add configuration"
+return 1
     fi
 
-    return 0
+return 0
 }
 
 clean()
@@ -237,20 +242,20 @@ clean()
     cache="/var/cache/lxc/opensuse"
 
     if [ ! -e $cache ]; then
-	exit 0
+exit 0
     fi
 
     # lock, so we won't purge while someone is creating a repository
     (
-	flock -n -x 200
-	if [ $? != 0 ]; then
-	    echo "Cache repository is busy."
-	    exit 1
-	fi
+flock -n -x 200
+if [ $? != 0 ]; then
+echo "Cache repository is busy."
+exit 1
+fi
 
-	echo -n "Purging the download cache..."
-	rm --preserve-root --one-file-system -rf $cache && echo "Done." || exit 1
-	exit 0
+echo -n "Purging the download cache..."
+rm --preserve-root --one-file-system -rf $cache && echo "Done." || exit 1
+exit 0
 
     ) 200>/var/lock/subsys/lxc
 }
@@ -263,48 +268,52 @@ EOF
     return 0
 }
 
+rootfs=$3
 path=$1
+name=$2
 
+#declare -a arc
+#arc=(`echo ${2//./}`} # | tr "-" " "`)
+#DISTRO=${$arc[0]}
 #eval set -- "$options"
 
 
-type zypper > /dev/null
-if [ $? -ne 0 ]; then
-    echo "'zypper' command is missing"
-    exit 1
-fi
+#type zypper > /dev/null
+#if [ $? -ne 0 ]; then
+#echo "'zypper' command is missing"
+#    exit 1
+#fi
 
-if [ -z "$path" ]; then
-    echo "'path' parameter is required"
-    exit 1
-fi
+#if [ -z "$path" ]; then
+#echo "'path' parameter is required"
+#    exit 1
+#fi
 
 if [ "$(id -u)" != "0" ]; then
-    echo "This script should be run as 'root'"
+echo "This script should be run as 'root'"
     exit 1
 fi
 
-rootfs=$path
 
 install_opensuse $rootfs
 if [ $? -ne 0 ]; then
-    echo "failed to install opensuse"
+echo "failed to install opensuse"
     exit 1
 fi
 
 configure_opensuse $rootfs $name
 if [ $? -ne 0 ]; then
-    echo "failed to configure opensuse for a container"
+echo "failed to configure opensuse for a container"
     exit 1
 fi
 
 copy_configuration $path $rootfs $name
 if [ $? -ne 0 ]; then
-    echo "failed write configuration file"
+echo "failed write configuration file"
     exit 1
 fi
 
 if [ ! -z $clean ]; then
-    clean || exit 1
+clean || exit 1
     exit 0
 fi
